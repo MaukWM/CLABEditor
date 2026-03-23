@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLAB Save Editor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; display: flex; justify-content: center; padding: 2rem; }
+  .container { max-width: 520px; width: 100%; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.3rem; color: #7eb8da; }
+  .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 1.5rem; }
+  .drop-zone { border: 2px dashed #444; border-radius: 8px; padding: 2.5rem 1rem; text-align: center; cursor: pointer; transition: border-color 0.2s; margin-bottom: 1.5rem; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: #7eb8da; }
+  .drop-zone input { display: none; }
+  .drop-zone p { color: #999; font-size: 0.9rem; line-height: 1.5; }
+  .path-help { background: #0f1a30; border-radius: 6px; padding: 0.8rem 1rem; margin-bottom: 1.2rem; font-size: 0.78rem; color: #888; line-height: 1.6; }
+  .path-help summary { cursor: pointer; color: #7eb8da; font-size: 0.85rem; margin-bottom: 0.4rem; }
+  .path-help code { background: #1a1a2e; padding: 0.15rem 0.4rem; border-radius: 3px; color: #bbb; font-size: 0.78rem; word-break: break-all; }
+  .drop-zone .filename { color: #7eb8da; font-weight: 600; margin-top: 0.5rem; }
+  .editor { display: none; }
+  .editor.visible { display: block; }
+  .section { background: #16213e; border-radius: 8px; padding: 1.2rem; margin-bottom: 1rem; }
+  .section h2 { font-size: 1rem; margin-bottom: 0.8rem; color: #7eb8da; }
+  .field { margin-bottom: 0.8rem; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 0.3rem; }
+  .field .row { display: flex; align-items: center; gap: 0.6rem; }
+  input[type="number"], input[type="range"] { background: #0f1a30; border: 1px solid #333; color: #e0e0e0; border-radius: 4px; padding: 0.4rem 0.6rem; font-size: 0.95rem; }
+  input[type="number"] { width: 100px; }
+  input[type="range"] { flex: 1; accent-color: #7eb8da; }
+  .power-val { font-family: monospace; font-size: 1.1rem; min-width: 3.5rem; text-align: right; }
+  .info { font-size: 0.8rem; color: #888; }
+  .info strong { color: #bbb; }
+  button { background: #7eb8da; color: #1a1a2e; border: none; border-radius: 6px; padding: 0.5rem 1.2rem; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  button:hover { background: #9dd0ef; }
+  button.danger { background: #da7e7e; }
+  button.danger:hover { background: #ef9d9d; }
+  .save-btn { width: 100%; padding: 0.7rem; font-size: 1rem; margin-top: 0.5rem; }
+  .error { background: #3e1621; border: 1px solid #6b2a3a; border-radius: 6px; padding: 0.8rem; color: #ef9d9d; font-size: 0.85rem; margin-bottom: 1rem; display: none; }
+  .markers { display: flex; justify-content: space-between; font-size: 0.7rem; color: #666; padding: 0 2px; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Cirno! Lifts a Boulder — Save Editor</h1>
+  <p class="subtitle">Upload levelsave.icecold, edit, download.</p>
+
+  <details class="path-help">
+    <summary>Where is my save file?</summary>
+    <strong>Windows:</strong> <code>%appdata%\Godot\app_userdata\Cirno! Lifts a Boulder\levelsave.icecold</code><br>
+    Paste <code>%appdata%\Godot\app_userdata\Cirno! Lifts a Boulder</code> into Explorer's address bar.<br><br>
+    <strong>Linux:</strong> <code>~/.local/share/godot/app_userdata/Cirno! Lifts a Boulder/levelsave.icecold</code><br>
+    <strong>macOS:</strong> <code>~/Library/Application Support/Godot/app_userdata/Cirno! Lifts a Boulder/levelsave.icecold</code><br><br>
+    Back up your save before editing! Drop the edited file back into the same folder to use it.
+  </details>
+
+  <div class="error" id="error"></div>
+
+  <div class="drop-zone" id="dropZone">
+    <p>Drop <strong>levelsave.icecold</strong> here or click to browse</p>
+    <input type="file" id="fileInput" accept=".icecold">
+    <div class="filename" id="fileName"></div>
+  </div>
+
+  <div class="editor" id="editor">
+    <div class="section">
+      <h2>Power</h2>
+      <div class="field">
+        <div class="row">
+          <input type="range" id="powerSlider" min="0" max="4" step="0.01" value="0">
+          <span class="power-val" id="powerVal">0.00</span>
+        </div>
+        <div class="markers">
+          <span>0</span><span>0.50 float</span><span>1.00 jump+</span><span>1.50 ice</span><span>4.00 max</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Or type exact value</label>
+        <input type="number" id="powerInput" min="0" max="4" step="0.01" value="0">
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Collected Items</h2>
+      <div class="field">
+        <p class="info">
+          <strong id="itemCount">0</strong> items collected &nbsp;|&nbsp;
+          Power: <strong id="cntPower">0</strong> &nbsp;
+          Score: <strong id="cntScore">0</strong> &nbsp;
+          Special: <strong id="cntSpecial">0</strong>
+        </p>
+      </div>
+      <div class="field">
+        <button class="danger" id="resetItems">Reset All Items (respawn everything)</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Info (read-only)</h2>
+      <div class="field">
+        <p class="info">
+          Score: <strong id="infoScore">0</strong> &nbsp;|&nbsp;
+          Timer: <strong id="infoTimer">0:00.000</strong> &nbsp;|&nbsp;
+          Flutter used: <strong id="infoFlutter">no</strong>
+        </p>
+        <p class="info" style="margin-top:0.4rem">
+          Position: <strong id="infoPos">—</strong>
+        </p>
+      </div>
+    </div>
+
+    <button class="save-btn" id="saveBtn">Download edited levelsave.icecold</button>
+  </div>
+</div>
+
+<script>
+// --- Godot 4 binary Variant codec ---
+// Type IDs (bit 16 = 64-bit flag)
+const TYPE_BOOL = 1, TYPE_INT = 2, TYPE_FLOAT = 3, TYPE_STRING = 4,
+      TYPE_VECTOR3 = 9, TYPE_DICTIONARY = 27, TYPE_ARRAY = 28;
+const FLAG_64 = 1 << 16;
+
+function decodeVariant(dv, offset) {
+  const typeField = dv.getUint32(offset, true);
+  const typeId = typeField & 0xFFFF;
+  const is64 = (typeField & FLAG_64) !== 0;
+  offset += 4;
+
+  switch (typeId) {
+    case TYPE_BOOL: {
+      const val = dv.getUint32(offset, true) !== 0;
+      return { value: val, offset: offset + 4 };
+    }
+    case TYPE_INT: {
+      if (is64) {
+        // Read as two 32-bit parts (DataView doesn't have getInt64 in all browsers)
+        const lo = dv.getUint32(offset, true);
+        const hi = dv.getInt32(offset + 4, true);
+        return { value: hi * 0x100000000 + lo, offset: offset + 8 };
+      }
+      const val = dv.getInt32(offset, true);
+      return { value: val, offset: offset + 4 };
+    }
+    case TYPE_FLOAT: {
+      if (is64) {
+        const val = dv.getFloat64(offset, true);
+        return { value: val, offset: offset + 8 };
+      }
+      const val = dv.getFloat32(offset, true);
+      return { value: val, offset: offset + 4 };
+    }
+    case TYPE_STRING: {
+      const len = dv.getUint32(offset, true);
+      offset += 4;
+      const bytes = new Uint8Array(dv.buffer, dv.byteOffset + offset, len);
+      const val = new TextDecoder().decode(bytes);
+      const padded = (len + 3) & ~3; // pad to 4-byte boundary
+      return { value: val, offset: offset + padded };
+    }
+    case TYPE_VECTOR3: {
+      if (is64) {
+        const x = dv.getFloat64(offset, true);
+        const y = dv.getFloat64(offset + 8, true);
+        const z = dv.getFloat64(offset + 16, true);
+        return { value: { x, y, z }, offset: offset + 24 };
+      }
+      const x = dv.getFloat32(offset, true);
+      const y = dv.getFloat32(offset + 4, true);
+      const z = dv.getFloat32(offset + 8, true);
+      return { value: { x, y, z }, offset: offset + 12 };
+    }
+    case TYPE_DICTIONARY: {
+      const count = dv.getUint32(offset, true);
+      offset += 4;
+      const dict = {};
+      const _keys = []; // preserve order
+      for (let i = 0; i < count; i++) {
+        const k = decodeVariant(dv, offset); offset = k.offset;
+        const v = decodeVariant(dv, offset); offset = v.offset;
+        dict[k.value] = v.value;
+        _keys.push(k.value);
+      }
+      dict._keys = _keys;
+      return { value: dict, offset };
+    }
+    case TYPE_ARRAY: {
+      const count = dv.getUint32(offset, true);
+      offset += 4;
+      const arr = [];
+      for (let i = 0; i < count; i++) {
+        const v = decodeVariant(dv, offset); offset = v.offset;
+        arr.push(v.value);
+      }
+      return { value: arr, offset };
+    }
+    default:
+      throw new Error(`Unknown Godot variant type ${typeId} at offset ${offset - 4}`);
+  }
+}
+
+function encodeVariant(value, meta) {
+  const parts = [];
+
+  function pushU32(n) { const b = new ArrayBuffer(4); new DataView(b).setUint32(0, n, true); parts.push(new Uint8Array(b)); }
+  function pushI32(n) { const b = new ArrayBuffer(4); new DataView(b).setInt32(0, n, true); parts.push(new Uint8Array(b)); }
+  function pushF32(n) { const b = new ArrayBuffer(4); new DataView(b).setFloat32(0, n, true); parts.push(new Uint8Array(b)); }
+  function pushF64(n) { const b = new ArrayBuffer(8); new DataView(b).setFloat64(0, n, true); parts.push(new Uint8Array(b)); }
+
+  function encode(val, m) {
+    if (m && m.type !== undefined) {
+      // Use stored metadata for exact type reconstruction
+      const typeField = m.typeField;
+      const typeId = typeField & 0xFFFF;
+      const is64 = (typeField & FLAG_64) !== 0;
+      pushU32(typeField);
+
+      switch (typeId) {
+        case TYPE_BOOL: pushU32(val ? 1 : 0); break;
+        case TYPE_INT:
+          if (is64) { pushU32(val & 0xFFFFFFFF); pushI32(Math.floor(val / 0x100000000)); }
+          else pushI32(val);
+          break;
+        case TYPE_FLOAT:
+          if (is64) pushF64(val); else pushF32(val);
+          break;
+        case TYPE_STRING: {
+          const bytes = new TextEncoder().encode(val);
+          pushU32(bytes.length);
+          parts.push(bytes);
+          const pad = (4 - (bytes.length % 4)) % 4;
+          if (pad) parts.push(new Uint8Array(pad));
+          break;
+        }
+        case TYPE_VECTOR3:
+          if (is64) { pushF64(val.x); pushF64(val.y); pushF64(val.z); }
+          else { pushF32(val.x); pushF32(val.y); pushF32(val.z); }
+          break;
+        case TYPE_DICTIONARY: {
+          const keys = val._keys || Object.keys(val).filter(k => k !== '_keys');
+          pushU32(keys.length);
+          for (const k of keys) {
+            encode(k, m.keyMeta && m.keyMeta[k]);
+            encode(val[k], m.valMeta && m.valMeta[k]);
+          }
+          break;
+        }
+        case TYPE_ARRAY: {
+          pushU32(val.length);
+          for (let i = 0; i < val.length; i++) {
+            encode(val[i], m.elMeta && m.elMeta[i]);
+          }
+          break;
+        }
+      }
+    } else {
+      // Fallback: infer type
+      if (typeof val === 'boolean') { pushU32(TYPE_BOOL); pushU32(val ? 1 : 0); }
+      else if (typeof val === 'number' && Number.isInteger(val)) { pushU32(TYPE_INT); pushI32(val); }
+      else if (typeof val === 'number') { pushU32(TYPE_FLOAT); pushF32(val); }
+      else if (typeof val === 'string') {
+        pushU32(TYPE_STRING);
+        const bytes = new TextEncoder().encode(val);
+        pushU32(bytes.length);
+        parts.push(bytes);
+        const pad = (4 - (bytes.length % 4)) % 4;
+        if (pad) parts.push(new Uint8Array(pad));
+      }
+    }
+  }
+
+  encode(value, meta);
+  const total = parts.reduce((s, p) => s + p.length, 0);
+  const result = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { result.set(p, off); off += p.length; }
+  return result;
+}
+
+// Decode + capture metadata for lossless re-encoding
+function decodeWithMeta(dv, offset) {
+  const typeField = dv.getUint32(offset, true);
+  const typeId = typeField & 0xFFFF;
+  const is64 = (typeField & FLAG_64) !== 0;
+  offset += 4;
+  const meta = { type: typeId, typeField };
+
+  switch (typeId) {
+    case TYPE_BOOL: {
+      const val = dv.getUint32(offset, true) !== 0;
+      return { value: val, meta, offset: offset + 4 };
+    }
+    case TYPE_INT: {
+      let val;
+      if (is64) {
+        const lo = dv.getUint32(offset, true);
+        const hi = dv.getInt32(offset + 4, true);
+        val = hi * 0x100000000 + lo;
+        offset += 8;
+      } else {
+        val = dv.getInt32(offset, true);
+        offset += 4;
+      }
+      return { value: val, meta, offset };
+    }
+    case TYPE_FLOAT: {
+      let val;
+      if (is64) { val = dv.getFloat64(offset, true); offset += 8; }
+      else { val = dv.getFloat32(offset, true); offset += 4; }
+      return { value: val, meta, offset };
+    }
+    case TYPE_STRING: {
+      const len = dv.getUint32(offset, true); offset += 4;
+      const bytes = new Uint8Array(dv.buffer, dv.byteOffset + offset, len);
+      const val = new TextDecoder().decode(bytes);
+      const padded = (len + 3) & ~3;
+      return { value: val, meta, offset: offset + padded };
+    }
+    case TYPE_VECTOR3: {
+      let x, y, z;
+      if (is64) {
+        x = dv.getFloat64(offset, true); y = dv.getFloat64(offset+8, true); z = dv.getFloat64(offset+16, true);
+        offset += 24;
+      } else {
+        x = dv.getFloat32(offset, true); y = dv.getFloat32(offset+4, true); z = dv.getFloat32(offset+8, true);
+        offset += 12;
+      }
+      return { value: { x, y, z }, meta, offset };
+    }
+    case TYPE_DICTIONARY: {
+      const count = dv.getUint32(offset, true); offset += 4;
+      const dict = {}; const _keys = [];
+      meta.keyMeta = {}; meta.valMeta = {};
+      for (let i = 0; i < count; i++) {
+        const k = decodeWithMeta(dv, offset); offset = k.offset;
+        const v = decodeWithMeta(dv, offset); offset = v.offset;
+        dict[k.value] = v.value;
+        _keys.push(k.value);
+        meta.keyMeta[k.value] = k.meta;
+        meta.valMeta[k.value] = v.meta;
+      }
+      dict._keys = _keys;
+      return { value: dict, meta, offset };
+    }
+    case TYPE_ARRAY: {
+      const count = dv.getUint32(offset, true); offset += 4;
+      const arr = []; meta.elMeta = [];
+      for (let i = 0; i < count; i++) {
+        const v = decodeWithMeta(dv, offset); offset = v.offset;
+        arr.push(v.value);
+        meta.elMeta.push(v.meta);
+      }
+      return { value: arr, meta, offset };
+    }
+    default:
+      throw new Error(`Unknown Godot variant type ${typeId} at offset ${offset - 4}`);
+  }
+}
+
+// --- App state ---
+let saveData = null;   // parsed dictionary
+let saveMeta = null;   // type metadata for lossless round-trip
+
+// --- UI ---
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileNameEl = document.getElementById('fileName');
+const editorEl = document.getElementById('editor');
+const errorEl = document.getElementById('error');
+const powerSlider = document.getElementById('powerSlider');
+const powerVal = document.getElementById('powerVal');
+const powerInput = document.getElementById('powerInput');
+const itemCount = document.getElementById('itemCount');
+const cntPower = document.getElementById('cntPower');
+const cntScore = document.getElementById('cntScore');
+const cntSpecial = document.getElementById('cntSpecial');
+const resetBtn = document.getElementById('resetItems');
+const saveBtn = document.getElementById('saveBtn');
+
+function showError(msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
+function hideError() { errorEl.style.display = 'none'; }
+
+function updateUI() {
+  const d = saveData;
+  const p = d.power;
+  powerSlider.value = p;
+  powerInput.value = parseFloat(p.toFixed(2));
+  powerVal.textContent = p.toFixed(2);
+
+  itemCount.textContent = (d.items_collected || []).length;
+  cntPower.textContent = d.counter_power_items_collected || 0;
+  cntScore.textContent = d.counter_score_items_collected || 0;
+  cntSpecial.textContent = d.counter_special_items_collected || 0;
+
+  document.getElementById('infoScore').textContent = Math.floor(d.score || 0).toLocaleString();
+  const t = d.time_spent_seconds || 0;
+  const mins = Math.floor(t / 60);
+  const secs = t % 60;
+  document.getElementById('infoTimer').textContent = `${mins}:${secs.toFixed(3).padStart(6, '0')}`;
+  document.getElementById('infoFlutter').textContent = d.flutter_was_used ? 'yes' : 'no';
+  const pos = d.cirno_position;
+  if (pos) document.getElementById('infoPos').textContent = `${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`;
+}
+
+function loadFile(file) {
+  hideError();
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const buf = reader.result;
+      const dv = new DataView(buf);
+      // store_var format: 4-byte length prefix, then variant data
+      const len = dv.getUint32(0, true);
+      const result = decodeWithMeta(dv, 4);
+      saveData = result.value;
+      saveMeta = result.meta;
+
+      if (saveData.level_version !== undefined && saveData.level_version !== 100) {
+        showError(`Warning: level_version is ${saveData.level_version}, expected 100. File may be from a different game version.`);
+      }
+
+      fileNameEl.textContent = file.name;
+      editorEl.classList.add('visible');
+      updateUI();
+    } catch (e) {
+      showError(`Failed to parse save file: ${e.message}`);
+      console.error(e);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Drag and drop
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+// Power controls
+powerSlider.addEventListener('input', () => {
+  const v = parseFloat(powerSlider.value);
+  saveData.power = v;
+  powerVal.textContent = v.toFixed(2);
+  powerInput.value = v.toFixed(2);
+});
+powerInput.addEventListener('change', () => {
+  let v = parseFloat(powerInput.value);
+  if (isNaN(v)) v = 0;
+  v = Math.max(0, Math.min(4, v));
+  saveData.power = v;
+  powerSlider.value = v;
+  powerVal.textContent = v.toFixed(2);
+  powerInput.value = v.toFixed(2);
+});
+
+// Reset items
+resetBtn.addEventListener('click', () => {
+  saveData.items_collected = [];
+  // Clear the element metadata so encoder writes an empty array with correct type header
+  if (saveMeta.valMeta && saveMeta.valMeta['items_collected']) {
+    saveMeta.valMeta['items_collected'].elMeta = [];
+  }
+  saveData.counter_power_items_collected = 0;
+  saveData.counter_score_items_collected = 0;
+  saveData.counter_special_items_collected = 0;
+  updateUI();
+});
+
+// Save / download
+saveBtn.addEventListener('click', () => {
+  try {
+    const variantBytes = encodeVariant(saveData, saveMeta);
+    // Prepend 4-byte length
+    const out = new Uint8Array(4 + variantBytes.length);
+    new DataView(out.buffer).setUint32(0, variantBytes.length, true);
+    out.set(variantBytes, 4);
+
+    const blob = new Blob([out], { type: 'application/octet-stream' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'levelsave.icecold';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    showError(`Failed to encode save file: ${e.message}`);
+    console.error(e);
+  }
+});
+</script>
+</body>
+</html>
